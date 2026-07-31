@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     title: "IceWatch · Арктическая навигационная аналитика",
     description:
       "Реальные Sentinel‑1 SAR-сцены, ледовый покров, структура льда и предварительная оценка навигационной опасности.",
-    images: [{ url: socialImage, width: 1600, height: 900 }],
+    images: [{ url: socialImage, width: 1672, height: 941 }],
     type: "website",
   },
   twitter: {
