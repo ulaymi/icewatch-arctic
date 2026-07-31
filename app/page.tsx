@@ -28,6 +28,54 @@ const layers = [
   ["hazard", "Навигационная опасность", "аналитический индекс", "risk-swatch"],
 ] as const;
 
+const demoModules: Record<string, { title: string; description: string; cards: readonly (readonly [string, string, string])[] }> = {
+  "Карта в сравнении": {
+    title: "Сравнение спутниковых источников",
+    description: "Макет рабочего места для сопоставления радиолокационной и оптической мозаик.",
+    cards: [
+      ["Sentinel-1 SAR", "48 сцен", "Независим от облачности"],
+      ["NOAA-20 VIIRS", "1 мозаика / сутки", "Естественные цвета · 375 м"],
+      ["Terra MODIS", "1 мозаика / сутки", "Естественные цвета · 250–500 м"],
+    ],
+  },
+  "Статистика по морям": {
+    title: "Сводка по арктическим морям",
+    description: "Демонстрационный пример будущей межрегиональной статистики.",
+    cards: [
+      ["Баренцево море", "18% льда", "Риск 1,6 / 5"],
+      ["Карское море", "64% льда", "Риск 3,1 / 5"],
+      ["Море Лаптевых", "79% льда", "Риск 3,8 / 5"],
+    ],
+  },
+  "Маршруты": {
+    title: "Окна проходимости маршрутов",
+    description: "Демонстрационные маршрутные карточки без статуса навигационной рекомендации.",
+    cards: [
+      ["Сабетта → Мурманск", "Окно 06:00–13:00", "Умеренный риск"],
+      ["Диксон → Певек", "Требуется уточнение", "Повышенный риск"],
+      ["Архангельск → Сабетта", "Окно 09:00–18:00", "Низкий риск"],
+    ],
+  },
+  "Выгрузки": {
+    title: "Подготовленные наборы",
+    description: "Демонстрационный реестр форматов, которые могут формироваться серверным контуром.",
+    cards: [
+      ["Карта покрытия", "GeoTIFF", "10 м · выбранная дата"],
+      ["Статистика акватории", "CSV", "Показатели по сценам"],
+      ["Оперативная сводка", "PDF", "Карта и ключевые риски"],
+    ],
+  },
+  "Оповещения": {
+    title: "Лента событий",
+    description: "Демонстрационные уведомления для настройки будущих пороговых правил.",
+    cards: [
+      ["Карские Ворота", "Рост SAR-сигнала", "Порог превышен на 12%"],
+      ["Подход к Сабетте", "Новая сцена", "Sentinel-1 · 15:51 UTC"],
+      ["Море Лаптевых", "Облачность оптики", "Используется SAR-слой"],
+    ],
+  },
+};
+
 function KpiCard({
   tone,
   icon,
@@ -64,10 +112,17 @@ export default function Home() {
   const [activeLayer, setActiveLayer] = useState("sar");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState("Мониторинг");
+  const demoModule = demoModules[activeNav];
 
   function selectLayer(key: string) {
     setActiveLayer(key);
     window.dispatchEvent(new CustomEvent("ice:layer-select", { detail: { key } }));
+  }
+
+  function selectNavigation(label: string) {
+    setActiveNav(label);
+    const targetId = label === "Мониторинг" ? "map-panel" : label === "Временные ряды" ? "ice-chart" : "demo-module";
+    window.setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   return (
@@ -95,8 +150,11 @@ export default function Home() {
 
         <div className="top-filter">
           <label htmlFor="satellite-select">Спутник</label>
-          <select id="satellite-select" defaultValue="sentinel-1-rtc">
-            <option value="sentinel-1-rtc">Sentinel-1 SAR · RTC</option>
+          <select id="satellite-select" defaultValue="combined">
+            <option value="combined">Sentinel-1 SAR + NOAA-20 VIIRS</option>
+            <option value="sentinel1">Sentinel-1 SAR · RTC</option>
+            <option value="viirs">NOAA-20 · VIIRS True Color</option>
+            <option value="modis">Terra · MODIS True Color</option>
           </select>
         </div>
         <div className="top-filter region-filter">
@@ -124,7 +182,7 @@ export default function Home() {
                 className={activeNav === label ? "active" : ""}
                 type="button"
                 key={label}
-                onClick={() => setActiveNav(label)}
+                onClick={() => selectNavigation(label)}
               >
                 <span aria-hidden="true">{icon}</span>{label}
               </button>
@@ -132,7 +190,7 @@ export default function Home() {
           </nav>
 
           <section className="sidebar-card route-card">
-            <div className="sidebar-card-title"><span>Маршрут</span><b>САБЕТТА → МУРМАНСК</b></div>
+            <div className="sidebar-card-title"><span>Маршрут · демо</span><b>САБЕТТА → МУРМАНСК</b></div>
             <div className="route-line"><i /><i /><i /></div>
             <dl>
               <div><dt>Состояние</dt><dd id="route-status">Расчёт…</dd></div>
@@ -152,7 +210,7 @@ export default function Home() {
         <section className="content">
           <div className="content-heading">
             <div>
-              <span className="eyebrow">СЕВЕРНЫЕ МОРЯ РОССИИ · SENTINEL-1</span>
+              <span className="eyebrow">СЕВЕРНЫЕ МОРЯ РОССИИ · SENTINEL-1 · VIIRS · MODIS</span>
               <h1>Ледовая обстановка</h1>
             </div>
             <div className="heading-meta">
@@ -160,6 +218,21 @@ export default function Home() {
               <span id="scene-summary">Поиск актуальных сцен…</span>
             </div>
           </div>
+
+          {demoModule && (
+            <section className="panel demo-module" id="demo-module" aria-label={`${demoModule.title} — демонстрационные данные`}>
+              <div className="panel-header">
+                <div><span className="panel-kicker">ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ</span><h2>{demoModule.title}</h2></div>
+                <span className="demo-badge">ДЕМО</span>
+              </div>
+              <p className="demo-description">{demoModule.description} Карта ниже всегда использует только реальные спутниковые данные.</p>
+              <div className="demo-grid">
+                {demoModule.cards.map(([label, value, detail]) => (
+                  <article key={label}><span>{label}</span><b>{value}</b><small>{detail}</small></article>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="kpi-grid" aria-label="Ключевые показатели">
             <KpiCard tone="cyan" icon="❄" label="Ледовый покров" valueId="metric-concentration" value="—" unit="%" detailId="metric-concentration-note" detail="по SAR-отражению" />
@@ -184,7 +257,7 @@ export default function Home() {
                   <b>Ищем снимки по всему северному побережью</b>
                   <small>Данные поступают напрямую из облачного каталога</small>
                 </div>
-                <div className="map-legend">
+                <div className="map-legend" id="map-legend">
                   <span id="legend-title">Нормированная интенсивность SAR · VV/HH + VH/HV</span>
                   <div className="legend-gradient" id="legend-gradient" />
                   <div className="legend-labels"><span id="legend-min">0,01 · ниже</span><span id="legend-max">0,55 · выше</span></div>
@@ -212,12 +285,12 @@ export default function Home() {
                 />
                 <div className="map-date-control-range">
                   <span id="date-slider-start">—</span>
-                  <span>доступные проходы Sentinel-1</span>
+                  <span>реальные проходы Sentinel-1 + суточные мозаики NASA</span>
                   <span id="date-slider-end">—</span>
                 </div>
               </div>
               <div className="map-footer">
-                <span><i className="source-dot" /> Источник: Copernicus Sentinel-1 RTC</span>
+                <span><i className="source-dot" /> Источник: <span id="map-source">Copernicus Sentinel-1 RTC + NASA GIBS VIIRS</span></span>
                 <span>Пространственное разрешение: <b id="map-resolution">10 м</b></span>
                 <span>Снимки по всему побережью: <b id="map-scenes-count">—</b></span>
               </div>
@@ -260,7 +333,7 @@ export default function Home() {
               </section>
 
               <section className="panel forecast-panel">
-                <div className="panel-header"><div><span className="panel-kicker">ЭКСТРАПОЛЯЦИЯ ТРЕНДА</span><h2>Риск на 72 часа</h2></div><span className="trend-arrow" id="forecast-trend">→</span></div>
+                <div className="panel-header"><div><span className="panel-kicker">ЭКСТРАПОЛЯЦИЯ ТРЕНДА · ДЕМО</span><h2>Риск на 72 часа</h2></div><span className="trend-arrow" id="forecast-trend">→</span></div>
                 <div className="forecast-bars">
                   <div><span><b>24 ч</b><em id="forecast-24-label">—</em></span><i><u id="forecast-24" /></i></div>
                   <div><span><b>48 ч</b><em id="forecast-48-label">—</em></span><i><u id="forecast-48" /></i></div>
@@ -301,7 +374,7 @@ export default function Home() {
 
           <footer className="footer">
             <span>IceWatch · исследовательский прототип</span>
-            <span>Данные: <a href="https://planetarycomputer.microsoft.com/dataset/sentinel-1-rtc" target="_blank" rel="noreferrer">Sentinel-1 RTC</a> · потоковая обработка без локального хранения</span>
+            <span>Данные: <a href="https://planetarycomputer.microsoft.com/dataset/sentinel-1-rtc" target="_blank" rel="noreferrer">Sentinel-1 RTC</a> · <a href="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs" target="_blank" rel="noreferrer">NASA GIBS</a> · без локального хранения</span>
             <span>Последний запрос: <b id="footer-updated">—</b></span>
           </footer>
         </section>

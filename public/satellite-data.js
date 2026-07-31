@@ -2,7 +2,31 @@ const STAC_SEARCH = "https://planetarycomputer.microsoft.com/api/stac/v1/search"
 const ITEM_PREVIEW = "https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png";
 const ITEM_STATISTICS = "https://planetarycomputer.microsoft.com/api/data/v1/item/statistics";
 const COLLECTION = "sentinel-1-rtc";
-const SCENE_LABEL_MIN_ZOOM = 6;
+const GIBS_WMTS = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best";
+const SATELLITE_MODES = {
+  combined: {
+    label: "Sentinel-1 SAR + NOAA-20 VIIRS",
+    mapTitle: "Комбинированная спутниковая мозаика",
+    resolution: "10 м SAR / 375 м VIIRS",
+    gibsLayer: "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+    opticalLabel: "NOAA-20 / VIIRS",
+  },
+  sentinel1: { label: "Sentinel-1 SAR · RTC", resolution: "10 м" },
+  viirs: {
+    label: "NOAA-20 · VIIRS True Color",
+    mapTitle: "Дневная мозаика NOAA-20 / VIIRS",
+    resolution: "375 м",
+    gibsLayer: "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+    opticalLabel: "NOAA-20 / VIIRS",
+  },
+  modis: {
+    label: "Terra · MODIS True Color",
+    mapTitle: "Дневная мозаика Terra / MODIS",
+    resolution: "250–500 м",
+    gibsLayer: "MODIS_Terra_CorrectedReflectance_TrueColor",
+    opticalLabel: "Terra / MODIS",
+  },
+};
 const ARCTIC_SEARCH_BBOXES = [
   [20, 64, 180, 84],
   [-180, 64, -160, 78],
@@ -65,7 +89,6 @@ const state = {
   baseLayer: null,
   boundaryLayer: null,
   overlays: [],
-  labels: [],
   scenes: [],
   selectedScenes: [],
   availableDates: [],
@@ -77,6 +100,7 @@ const state = {
 };
 
 function element(id) { return typeof document === "undefined" ? null : document.getElementById(id); }
+function satelliteMode() { return element("satellite-select")?.value ?? "combined"; }
 function clamp(value, minimum = 0, maximum = 100) { return Math.min(maximum, Math.max(minimum, value)); }
 function round(value, digits = 0) { const factor = 10 ** digits; return Math.round(value * factor) / factor; }
 function toDate(value) { return new Date(value); }
@@ -296,23 +320,33 @@ function initMap() {
     const mean = state.observations.length ? weightedAverage(state.observations, "hazard") : null;
     L.popup().setLatLng(latlng).setContent(`<b>Точка наблюдения</b><br>${latlng.lat.toFixed(3)}° N, ${latlng.lng.toFixed(3)}° E<br><span style="color:#82949e">Средний риск акватории: ${mean ? `${mean.toFixed(1)} / 5` : "рассчитывается"}</span>`).openOn(state.map);
   });
-  state.map.on("zoomend", updateSceneLabelVisibility);
 }
 
 function removeMapLayers() {
-  for (const layer of [...state.overlays, ...state.labels]) state.map?.removeLayer(layer);
+  for (const layer of state.overlays) state.map?.removeLayer(layer);
   state.overlays = [];
-  state.labels = [];
 }
 
-function updateSceneLabelVisibility() {
-  if (!state.map) return;
-  const shouldShow = state.map.getZoom() >= SCENE_LABEL_MIN_ZOOM;
-  for (const label of state.labels) {
-    const isVisible = state.map.hasLayer(label);
-    if (shouldShow && !isVisible) label.addTo(state.map);
-    if (!shouldShow && isVisible) state.map.removeLayer(label);
-  }
+export function buildGibsTileUrl(layer, date) {
+  return `${GIBS_WMTS}/${layer}/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+}
+
+function addGibsLayer(mode, selectedDate) {
+  const source = SATELLITE_MODES[mode];
+  if (!source?.gibsLayer || !state.map) return;
+  const layer = globalThis.L.tileLayer(buildGibsTileUrl(source.gibsLayer, selectedDate), {
+    attribution: `${source.opticalLabel} © NASA GIBS`,
+    maxNativeZoom: 9,
+    maxZoom: 13,
+    opacity: state.opacity,
+    crossOrigin: true,
+  }).addTo(state.map);
+  state.overlays.push(layer);
+}
+
+function sceneTooltip(scene) {
+  const platform = scene.properties.platform?.toUpperCase() || "SENTINEL-1";
+  return `${platform} · ${formatDate(scene.properties.datetime, true)} UTC`;
 }
 
 function renderRegion(region) {
@@ -331,38 +365,60 @@ function renderScenes(scenes = state.selectedScenes) {
   if (!state.map) return;
   removeMapLayers();
   const L = globalThis.L;
-  for (const scene of scenes) {
-    const [west, south, east, north] = normalizeBboxForMap(scene.bbox);
-    const overlay = L.imageOverlay(buildPreviewUrl(scene, state.layer), [[south, west], [north, east]], {
-      opacity: state.opacity,
-      interactive: true,
-      crossOrigin: true,
-      className: "satellite-scene",
-    }).addTo(state.map);
-    overlay.on("error", () => overlay.setOpacity(0));
-    overlay.bindTooltip(`Sentinel-1 · ${formatDate(scene.properties.datetime, true)} UTC`, { sticky: true });
-    state.overlays.push(overlay);
-    const label = L.marker([(south + north) / 2, (west + east) / 2], {
-      interactive: false,
-      icon: L.divIcon({ className: "scene-label", html: `<div>S1 · ${formatDate(scene.properties.datetime, true)}</div>`, iconSize: [108, 22] }),
-    });
-    state.labels.push(label);
+  const mode = satelliteMode();
+  const selectedDate = element("observation-date")?.value || isoDay(new Date());
+  const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
+  const showSar = mode === "combined" || mode === "sentinel1";
+  const showOptical = Boolean(source.gibsLayer);
+
+  if (showOptical) addGibsLayer(mode, selectedDate);
+  if (showSar) {
+    for (const scene of scenes) {
+      const [west, south, east, north] = normalizeBboxForMap(scene.bbox);
+      const overlay = L.imageOverlay(buildPreviewUrl(scene, state.layer), [[south, west], [north, east]], {
+        opacity: state.opacity,
+        interactive: true,
+        crossOrigin: true,
+        className: "satellite-scene",
+      }).addTo(state.map);
+      overlay.on("error", () => overlay.setOpacity(0));
+      overlay.bindTooltip(sceneTooltip(scene), { sticky: true });
+      state.overlays.push(overlay);
+    }
   }
-  updateSceneLabelVisibility();
+
   const layer = LAYERS[state.layer];
-  element("map-layer-title").textContent = layer.label;
-  element("legend-title").textContent = layer.legend;
-  element("legend-min").textContent = layer.min;
-  element("legend-max").textContent = layer.max;
-  element("legend-gradient").style.background = layer.gradient;
-  element("map-scenes-count").textContent = `${scenes.length}`;
+  const legend = element("map-legend");
+  legend?.classList.toggle("hidden", !showSar);
+  element("map-layer-title").textContent = showSar
+    ? mode === "combined" ? `${layer.label} + дневная оптика` : layer.label
+    : source.mapTitle;
+  if (showSar) {
+    element("legend-title").textContent = mode === "combined" ? `${layer.legend} · поверх VIIRS` : layer.legend;
+    element("legend-min").textContent = layer.min;
+    element("legend-max").textContent = layer.max;
+    element("legend-gradient").style.background = layer.gradient;
+  }
+  element("map-scenes-count").textContent = mode === "combined"
+    ? `${scenes.length} SAR + VIIRS`
+    : showSar ? `${scenes.length}` : "1 суточная мозаика";
+  if (element("map-source")) element("map-source").textContent = mode === "combined"
+    ? "Copernicus Sentinel-1 RTC + NASA GIBS VIIRS"
+    : mode === "sentinel1" ? "Copernicus Sentinel-1 RTC" : `NASA GIBS ${source.opticalLabel}`;
 }
 
 function updateMapSceneMeta(scenes, selectedDate) {
+  const mode = satelliteMode();
+  const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   element("map-date").textContent = formatDate(selectedDate);
+  if (mode === "viirs" || mode === "modis") {
+    element("map-orbit").textContent = `суточная мозаика · ${source.opticalLabel} · естественные цвета`;
+    element("map-resolution").textContent = source.resolution;
+    return;
+  }
   if (!scenes.length) {
     element("map-orbit").textContent = "нет снимков на выбранную дату";
-    element("map-resolution").textContent = "10 м";
+    element("map-resolution").textContent = source.resolution;
     return;
   }
   const orbitStates = new Set(scenes.map((scene) => scene.properties["sat:orbit_state"]).filter(Boolean));
@@ -371,13 +427,18 @@ function updateMapSceneMeta(scenes, selectedDate) {
     : orbitStates.has("ascending") ? "восходящая орбита" : "нисходящая орбита";
   const platforms = [...new Set(scenes.map((scene) => scene.properties.platform?.toUpperCase()).filter(Boolean))].join(" + ") || "SENTINEL-1";
   const polarizations = [...new Set(scenes.map((scene) => polarizationAssets(scene)?.label).filter(Boolean))].join(" + ");
-  element("map-orbit").textContent = `${scenes.length} сцен · ${orbitLabel} · ${platforms} · ${polarizations}`;
-  element("map-resolution").textContent = `${scenes[0].properties["sar:pixel_spacing_range"] ?? 10} м`;
+  const opticalSuffix = mode === "combined" ? ` · + ${source.opticalLabel}` : "";
+  element("map-orbit").textContent = `${scenes.length} сцен · ${orbitLabel} · ${platforms} · ${polarizations}${opticalSuffix}`;
+  element("map-resolution").textContent = mode === "combined" ? source.resolution : `${scenes[0].properties["sar:pixel_spacing_range"] ?? 10} м`;
 }
 
 function updateDateSliderCopy(selectedDate, scenes) {
+  const mode = satelliteMode();
+  const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   element("date-slider-value").textContent = formatDate(selectedDate);
-  element("date-slider-scenes").textContent = `${scenes.length} снимков · вся российская Арктика`;
+  element("date-slider-scenes").textContent = mode === "combined"
+    ? `${scenes.length} SAR-снимков + мозаика VIIRS · вся российская Арктика`
+    : mode === "sentinel1" ? `${scenes.length} SAR-снимков · вся российская Арктика` : `суточная мозаика ${source.opticalLabel} · вся российская Арктика`;
 }
 
 function configureDateSlider(scenes, requestedDate) {
@@ -405,7 +466,10 @@ function previewDateFromSlider(index) {
   renderScenes();
   updateMapSceneMeta(state.selectedScenes, selectedDate);
   updateDateSliderCopy(selectedDate, state.selectedScenes);
-  element("scene-summary").textContent = `${state.selectedScenes.length} снимков на выбранную дату · показаны все северные моря`;
+  const mode = satelliteMode();
+  element("scene-summary").textContent = mode === "combined"
+    ? `${state.selectedScenes.length} SAR-снимков + VIIRS · показаны все северные моря`
+    : mode === "sentinel1" ? `${state.selectedScenes.length} SAR-снимков · показаны все северные моря` : `суточная мозаика ${SATELLITE_MODES[mode]?.opticalLabel} · вся российская Арктика`;
 }
 
 function aggregateByDay(observations) {
@@ -466,8 +530,11 @@ function hazardLabel(value) {
 }
 
 function updateDashboard(observations, scenes, region, regionalSceneCount) {
+  const mode = satelliteMode();
+  const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   if (!observations.length) {
-    element("scene-summary").textContent = `${scenes.length} снимков показано по всему побережью · ${regionalSceneCount ? "статистика недоступна" : `нет покрытия акватории «${region.label}»`}`;
+    const coverage = mode === "combined" ? `${scenes.length} SAR-снимков + VIIRS` : mode === "sentinel1" ? `${scenes.length} SAR-снимков` : `мозаика ${source.opticalLabel}`;
+    element("scene-summary").textContent = `${coverage} по всему побережью · ${regionalSceneCount ? "SAR-статистика недоступна" : `нет SAR-покрытия акватории «${region.label}»`}`;
     ["metric-concentration", "metric-hazard", "metric-ridged", "metric-age", "donut-value"].forEach((id) => { element(id).textContent = "—"; });
     element("decision-water").textContent = `Все доступные снимки остаются на карте; для акватории «${region.label}» на выбранную дату нет расчётного покрытия.`;
     element("decision-ridge").textContent = "Переместите ползунок на соседний спутниковый проход для региональной оценки.";
@@ -517,7 +584,8 @@ function updateDashboard(observations, scenes, region, regionalSceneCount) {
   element("decision-ridge-title").textContent = deformed >= 30 ? "Повышенный сигнал деформации" : "Умеренный сигнал деформации";
   element("decision-ridge").textContent = `${formatNumber(deformed)}% покрытия имеет усиленный кросс-поляризационный отклик; требуется проверка ледовой картой.`;
   element("decision-update").textContent = `Ползунок переключает доступные проходы; выбор акватории «${region.label}» меняет только фокус и расчёт показателей.`;
-  element("scene-summary").textContent = `${scenes.length} снимков на карте по всему побережью · ${regionalSceneCount} в зоне расчёта · ${observations.length} обработано`;
+  const coverage = mode === "combined" ? `${scenes.length} SAR-снимков + VIIRS` : mode === "sentinel1" ? `${scenes.length} SAR-снимков` : `мозаика ${source.opticalLabel}`;
+  element("scene-summary").textContent = `${coverage} по всему побережью · ${regionalSceneCount} SAR-сцен в зоне расчёта · ${observations.length} обработано`;
   element("report-time").textContent = formatDate(latest.date, true);
   updateChart(observations);
 }
@@ -531,9 +599,9 @@ async function runAnalysis({ reuseScenes = false } = {}) {
   const region = REGIONS[selectedRegion] ?? REGIONS.nsr;
   const requestedDate = element("observation-date")?.value || new Date().toISOString().slice(0, 10);
 
-  setConnection("loading", "Запрашиваем Sentinel-1…", "всё северное побережье России");
+  setConnection("loading", "Запрашиваем спутниковые каталоги…", "Sentinel-1 + NASA GIBS");
   setLoading(true, reuseScenes ? "Пересчитываем выбранный проход" : "Ищем снимки по всему северному побережью");
-  element("scene-summary").textContent = `Каталог Sentinel-1 · вся российская Арктика`;
+  element("scene-summary").textContent = "Реальные данные Sentinel-1, VIIRS и MODIS · вся российская Арктика";
   renderRegion(region);
   removeMapLayers();
 
@@ -549,7 +617,11 @@ async function runAnalysis({ reuseScenes = false } = {}) {
     updateMapSceneMeta(selectedScenes, selectedDate);
     setLoading(false);
 
-    setConnection("connected", "Каталог подключён", `${selectedScenes.length} снимков · ${formatDate(selectedDate)}`);
+    const mode = satelliteMode();
+    const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
+    setConnection("connected", "Каталоги подключены", mode === "combined"
+      ? `${selectedScenes.length} SAR-снимков + VIIRS · ${formatDate(selectedDate)}`
+      : mode === "sentinel1" ? `${selectedScenes.length} SAR-снимков · ${formatDate(selectedDate)}` : `${source.opticalLabel} · ${formatDate(selectedDate)}`);
 
     const regionalScenes = selectedScenes.filter((scene) => sceneIntersectionWithRegion(scene, region) > 0);
     const observationResults = await Promise.all(regionalScenes.slice(0, 8).map((scene) => analyzeScene(scene, analysisFeatureForScene(region, scene), signal)));
@@ -575,6 +647,13 @@ function bindInterface() {
     runAnalysis();
   });
   element("region-select")?.addEventListener("change", () => runAnalysis({ reuseScenes: true }));
+  element("satellite-select")?.addEventListener("change", () => {
+    const selectedDate = element("observation-date")?.value;
+    renderScenes();
+    updateMapSceneMeta(state.selectedScenes, selectedDate);
+    updateDateSliderCopy(selectedDate, state.selectedScenes);
+    updateDashboard(state.observations, state.selectedScenes, REGIONS[element("region-select")?.value] ?? REGIONS.nsr, state.selectedScenes.filter((scene) => sceneIntersectionWithRegion(scene, REGIONS[element("region-select")?.value] ?? REGIONS.nsr) > 0).length);
+  });
   element("observation-date-slider")?.addEventListener("input", (event) => previewDateFromSlider(event.target.value));
   element("observation-date-slider")?.addEventListener("change", () => runAnalysis({ reuseScenes: true }));
   element("opacity-control")?.addEventListener("input", (event) => {
