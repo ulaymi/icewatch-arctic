@@ -50,6 +50,7 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.match(script, /gibs\.earthdata\.nasa\.gov/);
   assert.match(script, /VIIRS_NOAA20_CorrectedReflectance_TrueColor/);
   assert.match(script, /MODIS_Terra_CorrectedReflectance_TrueColor/);
+  assert.match(script, /VIIRS_NOAA20_Ice_Surface_Temp_Day/);
   assert.match(script, /bindTooltip/);
   assert.doesNotMatch(script, /SCENE_LABEL|L\.marker|scene-label/);
   assert.doesNotMatch(script, /L\.rectangle/);
@@ -62,6 +63,7 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.match(page, /Карта ниже всегда использует только реальные спутниковые данные/);
   assert.match(page, /id="sar-window"/);
   assert.match(page, /3 суток/);
+  assert.match(page, /Температура поверхности льда/);
   assert.match(packageJson, /"name": "icewatch-arctic"/);
   assert.match(packageJson, /"build:pages"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
@@ -94,6 +96,10 @@ test("keeps the Arctic mosaic global and derives previews from the visible legen
   assert.equal(
     buildGibsTileUrl("VIIRS_NOAA20_CorrectedReflectance_TrueColor", "2026-07-30"),
     "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/2026-07-30/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
+  );
+  assert.equal(
+    buildGibsTileUrl("VIIRS_NOAA20_Ice_Surface_Temp_Day", "2026-07-30", 7, "png"),
+    "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_Ice_Surface_Temp_Day/default/2026-07-30/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
   );
 });
 

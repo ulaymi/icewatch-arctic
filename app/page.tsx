@@ -26,6 +26,7 @@ const layers = [
   ["concentration", "Ледовый покров", "SAR-оценка", "ice-swatch"],
   ["type", "Тип и структура льда", "Co-pol / Cross-pol", "type-swatch"],
   ["hazard", "Навигационная опасность", "аналитический индекс", "risk-swatch"],
+  ["temperature", "Температура поверхности льда", "NOAA-20 / VIIRS · 750 м", "temperature-swatch"],
 ] as const;
 
 const demoModules: Record<string, { title: string; description: string; cards: readonly (readonly [string, string, string])[] }> = {
