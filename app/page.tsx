@@ -22,9 +22,9 @@ const regions = [
 ] as const;
 
 const layers = [
-  ["sar", "Радиолокационный композит", "VV + VH", "sar-swatch"],
+  ["sar", "Радиолокационный композит", "VV/HH + VH/HV", "sar-swatch"],
   ["concentration", "Ледовый покров", "SAR-оценка", "ice-swatch"],
-  ["type", "Тип и структура льда", "VV / VH", "type-swatch"],
+  ["type", "Тип и структура льда", "Co-pol / Cross-pol", "type-swatch"],
   ["hazard", "Навигационная опасность", "аналитический индекс", "risk-swatch"],
 ] as const;
 
@@ -93,10 +93,6 @@ export default function Home() {
           </span>
         </a>
 
-        <div className="top-filter date-filter">
-          <label htmlFor="observation-date">Дата наблюдения</label>
-          <input id="observation-date" type="date" defaultValue="2026-07-30" />
-        </div>
         <div className="top-filter">
           <label htmlFor="satellite-select">Спутник</label>
           <select id="satellite-select" defaultValue="sentinel-1-rtc">
@@ -105,7 +101,7 @@ export default function Home() {
         </div>
         <div className="top-filter region-filter">
           <label htmlFor="region-select">Акватория</label>
-          <select id="region-select" defaultValue="barents">
+          <select id="region-select" defaultValue="nsr">
             {regions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
           </select>
         </div>
@@ -185,20 +181,45 @@ export default function Home() {
                 <div id="ice-map" aria-label="Карта ледовой обстановки" />
                 <div className="map-loading" id="map-loading">
                   <span className="radar-loader" />
-                  <b>Ищем ближайшие спутниковые сцены</b>
+                  <b>Ищем снимки по всему северному побережью</b>
                   <small>Данные поступают напрямую из облачного каталога</small>
                 </div>
                 <div className="map-legend">
-                  <span id="legend-title">Интенсивность SAR</span>
+                  <span id="legend-title">Нормированная интенсивность SAR · VV/HH + VH/HV</span>
                   <div className="legend-gradient" id="legend-gradient" />
-                  <div className="legend-labels"><span id="legend-min">ниже</span><span id="legend-max">выше</span></div>
+                  <div className="legend-labels"><span id="legend-min">0,01 · ниже</span><span id="legend-max">0,55 · выше</span></div>
                 </div>
                 <div className="coordinates" id="coordinates">72.000° N, 48.000° E</div>
+              </div>
+              <div className="map-date-control">
+                <input id="observation-date" type="hidden" />
+                <div className="map-date-control-copy">
+                  <span>
+                    <small>ДАТА МОЗАИКИ</small>
+                    <b id="date-slider-value">Поиск доступных дат…</b>
+                  </span>
+                  <em id="date-slider-scenes">Все снимки северного побережья</em>
+                </div>
+                <input
+                  id="observation-date-slider"
+                  type="range"
+                  min="0"
+                  max="0"
+                  defaultValue="0"
+                  step="1"
+                  disabled
+                  aria-label="Дата спутниковой мозаики"
+                />
+                <div className="map-date-control-range">
+                  <span id="date-slider-start">—</span>
+                  <span>доступные проходы Sentinel-1</span>
+                  <span id="date-slider-end">—</span>
+                </div>
               </div>
               <div className="map-footer">
                 <span><i className="source-dot" /> Источник: Copernicus Sentinel-1 RTC</span>
                 <span>Пространственное разрешение: <b id="map-resolution">10 м</b></span>
-                <span>Сцены: <b id="map-scenes-count">—</b></span>
+                <span>Снимки по всему побережью: <b id="map-scenes-count">—</b></span>
               </div>
             </section>
 

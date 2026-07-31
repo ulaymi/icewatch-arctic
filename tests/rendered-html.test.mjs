@@ -23,6 +23,7 @@ test("renders the IceWatch dashboard", async () => {
   assert.match(html, /РЕАЛЬНЫЕ ДАННЫЕ/);
   assert.match(html, /Sentinel-1 SAR/);
   assert.match(html, /ice-map/);
+  assert.match(html, /observation-date-slider/);
   assert.match(html, /satellite-data\.js/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
@@ -44,11 +45,40 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.match(script, /ITEM_STATISTICS/);
   assert.match(script, /buildPreviewUrl/);
   assert.match(script, /calculateMetrics/);
+  assert.match(script, /light_nolabels/);
+  assert.match(script, /ARCTIC_SEARCH_BBOXES/);
+  assert.doesNotMatch(script, /rendered_preview/);
+  assert.doesNotMatch(script, /dark_nolabels/);
   assert.match(css, /#ff0032/i);
   assert.match(css, /color-scheme:\s*light/);
   assert.match(packageJson, /"name": "icewatch-arctic"/);
   assert.match(packageJson, /"build:pages"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+});
+
+test("keeps the Arctic mosaic global and derives previews from the visible legend", async () => {
+  const moduleUrl = new URL("../public/satellite-data.js", import.meta.url);
+  moduleUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  const { buildPreviewUrl, selectScenesForDate } = await import(moduleUrl.href);
+  const scene = (id, bbox, datetime, assets = { vv: {}, vh: {} }) => ({
+    id,
+    bbox,
+    properties: { datetime },
+    assets,
+  });
+  const scenes = [
+    scene("barents", [30, 68, 35, 72], "2026-07-30T08:00:00Z"),
+    scene("chukchi", [-175, 68, -168, 73], "2026-07-30T20:00:00Z", { hh: {}, hv: {} }),
+    scene("older", [80, 70, 88, 76], "2026-07-29T12:00:00Z"),
+  ];
+
+  assert.deepEqual(selectScenesForDate(scenes, "2026-07-30").map(({ id }) => id), ["barents", "chukchi"]);
+  const sarPreview = new URL(buildPreviewUrl(scenes[0], "sar"));
+  assert.equal(sarPreview.searchParams.get("colormap_name"), "viridis");
+  assert.equal(sarPreview.searchParams.get("rescale"), "0.01,0.55");
+  assert.equal(sarPreview.searchParams.get("expression"), "0.65*vv+1.8*vh");
+  const chukchiPreview = new URL(buildPreviewUrl(scenes[1], "sar"));
+  assert.equal(chukchiPreview.searchParams.get("expression"), "0.65*hh+1.8*hv");
 });
 
 test("configures a static GitHub Pages frontend", async () => {
