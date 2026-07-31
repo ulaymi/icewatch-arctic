@@ -60,6 +60,8 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.doesNotMatch(css, /scene-label/);
   assert.match(page, /ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ/);
   assert.match(page, /Карта ниже всегда использует только реальные спутниковые данные/);
+  assert.match(page, /id="sar-window"/);
+  assert.match(page, /3 суток/);
   assert.match(packageJson, /"name": "icewatch-arctic"/);
   assert.match(packageJson, /"build:pages"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
@@ -82,6 +84,7 @@ test("keeps the Arctic mosaic global and derives previews from the visible legen
   ];
 
   assert.deepEqual(selectScenesForDate(scenes, "2026-07-30").map(({ id }) => id), ["barents", "chukchi"]);
+  assert.deepEqual(selectScenesForDate(scenes, "2026-07-30", 2).map(({ id }) => id), ["older", "barents", "chukchi"]);
   const sarPreview = new URL(buildPreviewUrl(scenes[0], "sar"));
   assert.equal(sarPreview.searchParams.get("colormap_name"), "viridis");
   assert.equal(sarPreview.searchParams.get("rescale"), "0.01,0.55");

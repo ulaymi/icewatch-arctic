@@ -268,10 +268,20 @@ export default function Home() {
                 <input id="observation-date" type="hidden" />
                 <div className="map-date-control-copy">
                   <span>
-                    <small>ДАТА МОЗАИКИ</small>
+                    <small>КОНЕЦ ОКНА SAR-МОЗАИКИ</small>
                     <b id="date-slider-value">Поиск доступных дат…</b>
                   </span>
-                  <em id="date-slider-scenes">Все снимки северного побережья</em>
+                  <div className="map-date-control-meta">
+                    <em id="date-slider-scenes">Все снимки северного побережья</em>
+                    <label className="sar-window-control" htmlFor="sar-window">
+                      Окно SAR
+                      <select id="sar-window" defaultValue="3" aria-label="Продолжительность SAR-мозаики">
+                        <option value="1">1 сутки</option>
+                        <option value="3">3 суток</option>
+                        <option value="7">7 суток</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
                 <input
                   id="observation-date-slider"
