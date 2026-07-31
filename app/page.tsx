@@ -60,6 +60,7 @@ function KpiCard({
 }
 
 export default function Home() {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   const [activeLayer, setActiveLayer] = useState("sar");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState("Мониторинг");
@@ -84,7 +85,7 @@ export default function Home() {
           <span />
         </button>
         <a className="brand" href="#map-panel" aria-label="IceWatch — мониторинг льда">
-          <img className="brand-logo" src="/mts-eco-logo.svg" alt="МТС Экосистема" />
+          <img className="brand-logo" src={`${basePath}/mts-eco-logo.svg`} alt="МТС Экосистема" />
           <span className="brand-divider" />
           <span>
             <strong>IceWatch</strong>
