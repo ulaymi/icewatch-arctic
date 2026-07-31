@@ -44,7 +44,22 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.match(script, /ITEM_STATISTICS/);
   assert.match(script, /buildPreviewUrl/);
   assert.match(script, /calculateMetrics/);
-  assert.match(css, /MTS Text/);
+  assert.match(css, /#ff0032/i);
+  assert.match(css, /color-scheme:\s*light/);
   assert.match(packageJson, /"name": "icewatch-arctic"/);
+  assert.match(packageJson, /"build:pages"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+});
+
+test("configures a static GitHub Pages frontend", async () => {
+  const [nextConfig, workflow, fonts] = await Promise.all([
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8"),
+    readFile(new URL("../public/fonts.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(nextConfig, /output:\s*isGitHubPages\s*\?\s*"export"/);
+  assert.match(nextConfig, /basePath/);
+  assert.match(workflow, /actions\/deploy-pages@v4/);
+  assert.match(workflow, /pnpm run build:pages/);
+  assert.match(fonts, /mts-text-regular\.woff2/);
 });

@@ -4,6 +4,8 @@ import "./globals.css";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://icewatch-arctic.chatgpt.site";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const socialImage = `${siteUrl}/og.png`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -14,14 +16,14 @@ export const metadata: Metadata = {
     title: "IceWatch · Арктическая навигационная аналитика",
     description:
       "Реальные Sentinel‑1 SAR-сцены, ледовый покров, структура льда и предварительная оценка навигационной опасности.",
-    images: [{ url: "/og.png", width: 1600, height: 900 }],
+    images: [{ url: socialImage, width: 1600, height: 900 }],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "IceWatch · Арктическая навигационная аналитика",
     description: "Ледовая обстановка северных морей России по Sentinel‑1 SAR.",
-    images: ["/og.png"],
+    images: [socialImage],
   },
 };
 
@@ -36,6 +38,7 @@ export default function RootLayout({
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           rel="stylesheet"
         />
+        <link href={`${basePath}/fonts.css`} rel="stylesheet" />
       </head>
       <body>
         {children}
@@ -46,7 +49,7 @@ export default function RootLayout({
         />
         <Script
           id="satellite-data"
-          src="/satellite-data.js"
+          src={`${basePath}/satellite-data.js`}
           type="module"
           strategy="afterInteractive"
         />
