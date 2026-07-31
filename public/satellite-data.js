@@ -2,6 +2,7 @@ const STAC_SEARCH = "https://planetarycomputer.microsoft.com/api/stac/v1/search"
 const ITEM_PREVIEW = "https://planetarycomputer.microsoft.com/api/data/v1/item/preview.png";
 const ITEM_STATISTICS = "https://planetarycomputer.microsoft.com/api/data/v1/item/statistics";
 const COLLECTION = "sentinel-1-rtc";
+const SCENE_LABEL_MIN_ZOOM = 6;
 const ARCTIC_SEARCH_BBOXES = [
   [20, 64, 180, 84],
   [-180, 64, -160, 78],
@@ -295,6 +296,7 @@ function initMap() {
     const mean = state.observations.length ? weightedAverage(state.observations, "hazard") : null;
     L.popup().setLatLng(latlng).setContent(`<b>Точка наблюдения</b><br>${latlng.lat.toFixed(3)}° N, ${latlng.lng.toFixed(3)}° E<br><span style="color:#82949e">Средний риск акватории: ${mean ? `${mean.toFixed(1)} / 5` : "рассчитывается"}</span>`).openOn(state.map);
   });
+  state.map.on("zoomend", updateSceneLabelVisibility);
 }
 
 function removeMapLayers() {
@@ -303,18 +305,25 @@ function removeMapLayers() {
   state.labels = [];
 }
 
+function updateSceneLabelVisibility() {
+  if (!state.map) return;
+  const shouldShow = state.map.getZoom() >= SCENE_LABEL_MIN_ZOOM;
+  for (const label of state.labels) {
+    const isVisible = state.map.hasLayer(label);
+    if (shouldShow && !isVisible) label.addTo(state.map);
+    if (!shouldShow && isVisible) state.map.removeLayer(label);
+  }
+}
+
 function renderRegion(region) {
   if (!state.map) return;
   if (state.boundaryLayer) state.map.removeLayer(state.boundaryLayer);
+  state.boundaryLayer = null;
   const focusBounds = globalThis.L.latLngBounds();
-  const rectangles = regionBboxes(region).map((bbox) => {
+  for (const bbox of regionBboxes(region)) {
     const [west, south, east, north] = normalizeBboxForMap(bbox);
     focusBounds.extend([[south, west], [north, east]]);
-    return globalThis.L.rectangle([[south, west], [north, east]], {
-      color: "#ff0032", weight: 1, opacity: 0.42, dashArray: "5 7", fillOpacity: 0,
-    });
-  });
-  state.boundaryLayer = globalThis.L.layerGroup(rectangles).addTo(state.map);
+  }
   state.map.fitBounds(focusBounds, { animate: true, padding: [24, 24], maxZoom: region.zoom });
 }
 
@@ -322,7 +331,7 @@ function renderScenes(scenes = state.selectedScenes) {
   if (!state.map) return;
   removeMapLayers();
   const L = globalThis.L;
-  for (const [index, scene] of scenes.entries()) {
+  for (const scene of scenes) {
     const [west, south, east, north] = normalizeBboxForMap(scene.bbox);
     const overlay = L.imageOverlay(buildPreviewUrl(scene, state.layer), [[south, west], [north, east]], {
       opacity: state.opacity,
@@ -333,14 +342,13 @@ function renderScenes(scenes = state.selectedScenes) {
     overlay.on("error", () => overlay.setOpacity(0));
     overlay.bindTooltip(`Sentinel-1 · ${formatDate(scene.properties.datetime, true)} UTC`, { sticky: true });
     state.overlays.push(overlay);
-    if (index < 10) {
-      const label = L.marker([(south + north) / 2, (west + east) / 2], {
-        interactive: false,
-        icon: L.divIcon({ className: "scene-label", html: `<div>S1 · ${formatDate(scene.properties.datetime, true)}</div>`, iconSize: [108, 22] }),
-      }).addTo(state.map);
-      state.labels.push(label);
-    }
+    const label = L.marker([(south + north) / 2, (west + east) / 2], {
+      interactive: false,
+      icon: L.divIcon({ className: "scene-label", html: `<div>S1 · ${formatDate(scene.properties.datetime, true)}</div>`, iconSize: [108, 22] }),
+    });
+    state.labels.push(label);
   }
+  updateSceneLabelVisibility();
   const layer = LAYERS[state.layer];
   element("map-layer-title").textContent = layer.label;
   element("legend-title").textContent = layer.legend;

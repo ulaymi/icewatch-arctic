@@ -47,6 +47,10 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.match(script, /calculateMetrics/);
   assert.match(script, /light_nolabels/);
   assert.match(script, /ARCTIC_SEARCH_BBOXES/);
+  assert.match(script, /SCENE_LABEL_MIN_ZOOM\s*=\s*6/);
+  assert.match(script, /updateSceneLabelVisibility/);
+  assert.doesNotMatch(script, /index\s*<\s*10/);
+  assert.doesNotMatch(script, /L\.rectangle/);
   assert.doesNotMatch(script, /rendered_preview/);
   assert.doesNotMatch(script, /dark_nolabels/);
   assert.match(css, /#ff0032/i);
