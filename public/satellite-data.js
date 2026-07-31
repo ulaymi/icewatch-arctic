@@ -82,6 +82,17 @@ const LAYERS = {
     max: "5 · выше",
     gradient: "linear-gradient(90deg,#000004,#3b0f70,#8c2981,#de4968,#fe9f6d,#fcfdbf)",
   },
+  temperature: {
+    label: "Температура поверхности льда",
+    legend: "NOAA-20 / VIIRS · дневная температура поверхности льда",
+    min: "−50 °C",
+    max: "+40 °C",
+    gradient: "linear-gradient(90deg,#c500ff,#0000ff,#00cfff,#00ff9a,#e8ff00,#ff9a00,#ff0a00)",
+    external: true,
+    gibsLayer: "VIIRS_NOAA20_Ice_Surface_Temp_Day",
+    tileLevel: 7,
+    tileFormat: "png",
+  },
 };
 
 const state = {
@@ -337,8 +348,8 @@ function removeMapLayers() {
   state.overlays = [];
 }
 
-export function buildGibsTileUrl(layer, date) {
-  return `${GIBS_WMTS}/${layer}/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+export function buildGibsTileUrl(layer, date, level = 9, format = "jpg") {
+  return `${GIBS_WMTS}/${layer}/default/${date}/GoogleMapsCompatible_Level${level}/{z}/{y}/{x}.${format}`;
 }
 
 function addGibsLayer(mode, selectedDate) {
@@ -347,6 +358,24 @@ function addGibsLayer(mode, selectedDate) {
   const layer = globalThis.L.tileLayer(buildGibsTileUrl(source.gibsLayer, selectedDate), {
     attribution: `${source.opticalLabel} © NASA GIBS`,
     maxNativeZoom: 9,
+    maxZoom: 13,
+    opacity: state.opacity,
+    crossOrigin: true,
+  }).addTo(state.map);
+  state.overlays.push(layer);
+}
+
+function addTemperatureLayer(selectedDate) {
+  const temperature = LAYERS.temperature;
+  if (!state.map) return;
+  const layer = globalThis.L.tileLayer(buildGibsTileUrl(
+    temperature.gibsLayer,
+    selectedDate,
+    temperature.tileLevel,
+    temperature.tileFormat,
+  ), {
+    attribution: "NOAA-20 / VIIRS Ice Surface Temperature © NASA GIBS",
+    maxNativeZoom: temperature.tileLevel,
     maxZoom: 13,
     opacity: state.opacity,
     crossOrigin: true,
@@ -378,10 +407,12 @@ function renderScenes(scenes = state.selectedScenes) {
   const mode = satelliteMode();
   const selectedDate = element("observation-date")?.value || isoDay(new Date());
   const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
-  const showSar = mode === "combined" || mode === "sentinel1";
-  const showOptical = Boolean(source.gibsLayer);
+  const isTemperature = state.layer === "temperature";
+  const showSar = !isTemperature && (mode === "combined" || mode === "sentinel1");
+  const showOptical = !isTemperature && Boolean(source.gibsLayer);
 
-  if (showOptical) addGibsLayer(mode, selectedDate);
+  if (isTemperature) addTemperatureLayer(selectedDate);
+  else if (showOptical) addGibsLayer(mode, selectedDate);
   if (showSar) {
     for (const scene of scenes) {
       const [west, south, east, north] = normalizeBboxForMap(scene.bbox);
@@ -399,20 +430,24 @@ function renderScenes(scenes = state.selectedScenes) {
 
   const layer = LAYERS[state.layer];
   const legend = element("map-legend");
-  legend?.classList.toggle("hidden", !showSar);
-  element("map-layer-title").textContent = showSar
-    ? mode === "combined" ? `${layer.label} + дневная оптика` : layer.label
-    : source.mapTitle;
-  if (showSar) {
-    element("legend-title").textContent = mode === "combined" ? `${layer.legend} · поверх VIIRS` : layer.legend;
+  legend?.classList.toggle("hidden", !showSar && !isTemperature);
+  element("map-layer-title").textContent = isTemperature
+    ? layer.label
+    : showSar ? mode === "combined" ? `${layer.label} + дневная оптика` : layer.label : source.mapTitle;
+  if (showSar || isTemperature) {
+    element("legend-title").textContent = showSar && mode === "combined" ? `${layer.legend} · поверх VIIRS` : layer.legend;
     element("legend-min").textContent = layer.min;
     element("legend-max").textContent = layer.max;
     element("legend-gradient").style.background = layer.gradient;
   }
-  element("map-scenes-count").textContent = mode === "combined"
+  element("map-scenes-count").textContent = isTemperature
+    ? "1 температурная мозаика"
+    : mode === "combined"
     ? `${scenes.length} SAR за ${sarWindowLabel()} + VIIRS`
     : showSar ? `${scenes.length} за ${sarWindowLabel()}` : "1 суточная мозаика";
-  if (element("map-source")) element("map-source").textContent = mode === "combined"
+  if (element("map-source")) element("map-source").textContent = isTemperature
+    ? "NASA GIBS NOAA-20 / VIIRS Ice Surface Temperature"
+    : mode === "combined"
     ? "Copernicus Sentinel-1 RTC + NASA GIBS VIIRS"
     : mode === "sentinel1" ? "Copernicus Sentinel-1 RTC" : `NASA GIBS ${source.opticalLabel}`;
 }
@@ -421,6 +456,11 @@ function updateMapSceneMeta(scenes, selectedDate) {
   const mode = satelliteMode();
   const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   element("map-date").textContent = formatDate(selectedDate);
+  if (state.layer === "temperature") {
+    element("map-orbit").textContent = "суточный дневной продукт · NOAA-20 / VIIRS · поверхность льда";
+    element("map-resolution").textContent = "750 м";
+    return;
+  }
   if (mode === "viirs" || mode === "modis") {
     element("map-orbit").textContent = `суточная мозаика · ${source.opticalLabel} · естественные цвета`;
     element("map-resolution").textContent = source.resolution;
@@ -446,7 +486,9 @@ function updateDateSliderCopy(selectedDate, scenes) {
   const mode = satelliteMode();
   const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   element("date-slider-value").textContent = formatDate(selectedDate);
-  element("date-slider-scenes").textContent = mode === "combined"
+  element("date-slider-scenes").textContent = state.layer === "temperature"
+    ? "суточная температура поверхности льда NOAA-20 / VIIRS · вся российская Арктика"
+    : mode === "combined"
     ? `${scenes.length} SAR-снимков за ${sarWindowLabel()} + мозаика VIIRS · вся российская Арктика`
     : mode === "sentinel1" ? `${scenes.length} SAR-снимков за ${sarWindowLabel()} · вся российская Арктика` : `суточная мозаика ${source.opticalLabel} · вся российская Арктика`;
 }
@@ -477,7 +519,9 @@ function previewDateFromSlider(index) {
   updateMapSceneMeta(state.selectedScenes, selectedDate);
   updateDateSliderCopy(selectedDate, state.selectedScenes);
   const mode = satelliteMode();
-  element("scene-summary").textContent = mode === "combined"
+  element("scene-summary").textContent = state.layer === "temperature"
+    ? "реальная суточная температура поверхности льда NOAA-20 / VIIRS"
+    : mode === "combined"
     ? `${state.selectedScenes.length} SAR-снимков за ${sarWindowLabel()} + VIIRS · показаны все северные моря`
     : mode === "sentinel1" ? `${state.selectedScenes.length} SAR-снимков за ${sarWindowLabel()} · показаны все северные моря` : `суточная мозаика ${SATELLITE_MODES[mode]?.opticalLabel} · вся российская Арктика`;
 }
@@ -676,6 +720,9 @@ function bindInterface() {
     if (!LAYERS[detail?.key]) return;
     state.layer = detail.key;
     renderScenes();
+    const selectedDate = element("observation-date")?.value;
+    updateMapSceneMeta(state.selectedScenes, selectedDate);
+    updateDateSliderCopy(selectedDate, state.selectedScenes);
   });
 }
 
