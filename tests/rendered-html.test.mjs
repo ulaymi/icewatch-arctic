@@ -47,14 +47,19 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
   assert.match(script, /calculateMetrics/);
   assert.match(script, /light_nolabels/);
   assert.match(script, /ARCTIC_SEARCH_BBOXES/);
-  assert.match(script, /SCENE_LABEL_MIN_ZOOM\s*=\s*6/);
-  assert.match(script, /updateSceneLabelVisibility/);
-  assert.doesNotMatch(script, /index\s*<\s*10/);
+  assert.match(script, /gibs\.earthdata\.nasa\.gov/);
+  assert.match(script, /VIIRS_NOAA20_CorrectedReflectance_TrueColor/);
+  assert.match(script, /MODIS_Terra_CorrectedReflectance_TrueColor/);
+  assert.match(script, /bindTooltip/);
+  assert.doesNotMatch(script, /SCENE_LABEL|L\.marker|scene-label/);
   assert.doesNotMatch(script, /L\.rectangle/);
   assert.doesNotMatch(script, /rendered_preview/);
   assert.doesNotMatch(script, /dark_nolabels/);
   assert.match(css, /#ff0032/i);
   assert.match(css, /color-scheme:\s*light/);
+  assert.doesNotMatch(css, /scene-label/);
+  assert.match(page, /ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ/);
+  assert.match(page, /Карта ниже всегда использует только реальные спутниковые данные/);
   assert.match(packageJson, /"name": "icewatch-arctic"/);
   assert.match(packageJson, /"build:pages"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
@@ -63,7 +68,7 @@ test("ships cloud-streamed satellite logic and project branding", async () => {
 test("keeps the Arctic mosaic global and derives previews from the visible legend", async () => {
   const moduleUrl = new URL("../public/satellite-data.js", import.meta.url);
   moduleUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { buildPreviewUrl, selectScenesForDate } = await import(moduleUrl.href);
+  const { buildGibsTileUrl, buildPreviewUrl, selectScenesForDate } = await import(moduleUrl.href);
   const scene = (id, bbox, datetime, assets = { vv: {}, vh: {} }) => ({
     id,
     bbox,
@@ -83,6 +88,10 @@ test("keeps the Arctic mosaic global and derives previews from the visible legen
   assert.equal(sarPreview.searchParams.get("expression"), "0.65*vv+1.8*vh");
   const chukchiPreview = new URL(buildPreviewUrl(scenes[1], "sar"));
   assert.equal(chukchiPreview.searchParams.get("expression"), "0.65*hh+1.8*hv");
+  assert.equal(
+    buildGibsTileUrl("VIIRS_NOAA20_CorrectedReflectance_TrueColor", "2026-07-30"),
+    "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/2026-07-30/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
+  );
 });
 
 test("configures a static GitHub Pages frontend", async () => {
