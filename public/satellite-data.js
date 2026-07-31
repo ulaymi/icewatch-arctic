@@ -101,6 +101,8 @@ const state = {
 
 function element(id) { return typeof document === "undefined" ? null : document.getElementById(id); }
 function satelliteMode() { return element("satellite-select")?.value ?? "combined"; }
+function sarWindowDays() { return Math.max(1, Number(element("sar-window")?.value ?? 3)); }
+function sarWindowLabel(days = sarWindowDays()) { return `${days} ${days === 1 ? "сутки" : "суток"}`; }
 function clamp(value, minimum = 0, maximum = 100) { return Math.min(maximum, Math.max(minimum, value)); }
 function round(value, digits = 0) { const factor = 10 ** digits; return Math.round(value * factor) / factor; }
 function toDate(value) { return new Date(value); }
@@ -165,13 +167,21 @@ function polarizationAssets(scene) {
   return null;
 }
 
-export function selectScenesForDate(scenes, selectedDate) {
+export function selectScenesForDate(scenes, selectedDate, windowDays = 1) {
   if (!scenes.length) return [];
   const chosenDay = closestAvailableDate(availableDates(scenes), selectedDate);
+  const windowEnd = new Date(`${chosenDay}T23:59:59Z`).getTime();
+  const windowStartDate = new Date(`${chosenDay}T00:00:00Z`);
+  windowStartDate.setUTCDate(windowStartDate.getUTCDate() - (Math.max(1, windowDays) - 1));
+  const windowStart = windowStartDate.getTime();
   return scenes
-    .filter((scene) => isoDay(scene.properties.datetime) === chosenDay)
+    .filter((scene) => {
+      const timestamp = toDate(scene.properties.datetime).getTime();
+      return timestamp >= windowStart && timestamp <= windowEnd;
+    })
     .filter((scene) => polarizationAssets(scene))
-    .sort((first, second) => normalizeBboxForMap(first.bbox)[0] - normalizeBboxForMap(second.bbox)[0]);
+    .sort((first, second) => toDate(first.properties.datetime) - toDate(second.properties.datetime)
+      || normalizeBboxForMap(first.bbox)[0] - normalizeBboxForMap(second.bbox)[0]);
 }
 
 export function buildPreviewUrl(scene, layer = "sar") {
@@ -400,8 +410,8 @@ function renderScenes(scenes = state.selectedScenes) {
     element("legend-gradient").style.background = layer.gradient;
   }
   element("map-scenes-count").textContent = mode === "combined"
-    ? `${scenes.length} SAR + VIIRS`
-    : showSar ? `${scenes.length}` : "1 суточная мозаика";
+    ? `${scenes.length} SAR за ${sarWindowLabel()} + VIIRS`
+    : showSar ? `${scenes.length} за ${sarWindowLabel()}` : "1 суточная мозаика";
   if (element("map-source")) element("map-source").textContent = mode === "combined"
     ? "Copernicus Sentinel-1 RTC + NASA GIBS VIIRS"
     : mode === "sentinel1" ? "Copernicus Sentinel-1 RTC" : `NASA GIBS ${source.opticalLabel}`;
@@ -428,7 +438,7 @@ function updateMapSceneMeta(scenes, selectedDate) {
   const platforms = [...new Set(scenes.map((scene) => scene.properties.platform?.toUpperCase()).filter(Boolean))].join(" + ") || "SENTINEL-1";
   const polarizations = [...new Set(scenes.map((scene) => polarizationAssets(scene)?.label).filter(Boolean))].join(" + ");
   const opticalSuffix = mode === "combined" ? ` · + ${source.opticalLabel}` : "";
-  element("map-orbit").textContent = `${scenes.length} сцен · ${orbitLabel} · ${platforms} · ${polarizations}${opticalSuffix}`;
+  element("map-orbit").textContent = `${scenes.length} сцен за ${sarWindowLabel()} · ${orbitLabel} · ${platforms} · ${polarizations}${opticalSuffix}`;
   element("map-resolution").textContent = mode === "combined" ? source.resolution : `${scenes[0].properties["sar:pixel_spacing_range"] ?? 10} м`;
 }
 
@@ -437,8 +447,8 @@ function updateDateSliderCopy(selectedDate, scenes) {
   const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   element("date-slider-value").textContent = formatDate(selectedDate);
   element("date-slider-scenes").textContent = mode === "combined"
-    ? `${scenes.length} SAR-снимков + мозаика VIIRS · вся российская Арктика`
-    : mode === "sentinel1" ? `${scenes.length} SAR-снимков · вся российская Арктика` : `суточная мозаика ${source.opticalLabel} · вся российская Арктика`;
+    ? `${scenes.length} SAR-снимков за ${sarWindowLabel()} + мозаика VIIRS · вся российская Арктика`
+    : mode === "sentinel1" ? `${scenes.length} SAR-снимков за ${sarWindowLabel()} · вся российская Арктика` : `суточная мозаика ${source.opticalLabel} · вся российская Арктика`;
 }
 
 function configureDateSlider(scenes, requestedDate) {
@@ -454,7 +464,7 @@ function configureDateSlider(scenes, requestedDate) {
   element("observation-date").value = selectedDate;
   element("date-slider-start").textContent = formatDate(state.availableDates[0]);
   element("date-slider-end").textContent = formatDate(state.availableDates.at(-1));
-  updateDateSliderCopy(selectedDate, selectScenesForDate(scenes, selectedDate));
+  updateDateSliderCopy(selectedDate, selectScenesForDate(scenes, selectedDate, sarWindowDays()));
   return selectedDate;
 }
 
@@ -462,14 +472,14 @@ function previewDateFromSlider(index) {
   const selectedDate = state.availableDates[clamp(Number(index), 0, Math.max(0, state.availableDates.length - 1))];
   if (!selectedDate) return;
   element("observation-date").value = selectedDate;
-  state.selectedScenes = selectScenesForDate(state.scenes, selectedDate);
+  state.selectedScenes = selectScenesForDate(state.scenes, selectedDate, sarWindowDays());
   renderScenes();
   updateMapSceneMeta(state.selectedScenes, selectedDate);
   updateDateSliderCopy(selectedDate, state.selectedScenes);
   const mode = satelliteMode();
   element("scene-summary").textContent = mode === "combined"
-    ? `${state.selectedScenes.length} SAR-снимков + VIIRS · показаны все северные моря`
-    : mode === "sentinel1" ? `${state.selectedScenes.length} SAR-снимков · показаны все северные моря` : `суточная мозаика ${SATELLITE_MODES[mode]?.opticalLabel} · вся российская Арктика`;
+    ? `${state.selectedScenes.length} SAR-снимков за ${sarWindowLabel()} + VIIRS · показаны все северные моря`
+    : mode === "sentinel1" ? `${state.selectedScenes.length} SAR-снимков за ${sarWindowLabel()} · показаны все северные моря` : `суточная мозаика ${SATELLITE_MODES[mode]?.opticalLabel} · вся российская Арктика`;
 }
 
 function aggregateByDay(observations) {
@@ -533,7 +543,7 @@ function updateDashboard(observations, scenes, region, regionalSceneCount) {
   const mode = satelliteMode();
   const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
   if (!observations.length) {
-    const coverage = mode === "combined" ? `${scenes.length} SAR-снимков + VIIRS` : mode === "sentinel1" ? `${scenes.length} SAR-снимков` : `мозаика ${source.opticalLabel}`;
+    const coverage = mode === "combined" ? `${scenes.length} SAR-снимков за ${sarWindowLabel()} + VIIRS` : mode === "sentinel1" ? `${scenes.length} SAR-снимков за ${sarWindowLabel()}` : `мозаика ${source.opticalLabel}`;
     element("scene-summary").textContent = `${coverage} по всему побережью · ${regionalSceneCount ? "SAR-статистика недоступна" : `нет SAR-покрытия акватории «${region.label}»`}`;
     ["metric-concentration", "metric-hazard", "metric-ridged", "metric-age", "donut-value"].forEach((id) => { element(id).textContent = "—"; });
     element("decision-water").textContent = `Все доступные снимки остаются на карте; для акватории «${region.label}» на выбранную дату нет расчётного покрытия.`;
@@ -584,7 +594,7 @@ function updateDashboard(observations, scenes, region, regionalSceneCount) {
   element("decision-ridge-title").textContent = deformed >= 30 ? "Повышенный сигнал деформации" : "Умеренный сигнал деформации";
   element("decision-ridge").textContent = `${formatNumber(deformed)}% покрытия имеет усиленный кросс-поляризационный отклик; требуется проверка ледовой картой.`;
   element("decision-update").textContent = `Ползунок переключает доступные проходы; выбор акватории «${region.label}» меняет только фокус и расчёт показателей.`;
-  const coverage = mode === "combined" ? `${scenes.length} SAR-снимков + VIIRS` : mode === "sentinel1" ? `${scenes.length} SAR-снимков` : `мозаика ${source.opticalLabel}`;
+  const coverage = mode === "combined" ? `${scenes.length} SAR-снимков за ${sarWindowLabel()} + VIIRS` : mode === "sentinel1" ? `${scenes.length} SAR-снимков за ${sarWindowLabel()}` : `мозаика ${source.opticalLabel}`;
   element("scene-summary").textContent = `${coverage} по всему побережью · ${regionalSceneCount} SAR-сцен в зоне расчёта · ${observations.length} обработано`;
   element("report-time").textContent = formatDate(latest.date, true);
   updateChart(observations);
@@ -610,7 +620,7 @@ async function runAnalysis({ reuseScenes = false } = {}) {
     if (requestId !== state.requestId) return;
     state.scenes = scenes;
     const selectedDate = configureDateSlider(scenes, requestedDate);
-    const selectedScenes = selectScenesForDate(scenes, selectedDate);
+    const selectedScenes = selectScenesForDate(scenes, selectedDate, sarWindowDays());
     if (!selectedScenes.length) throw new Error("Нет подходящих двухполяризационных сцен Sentinel-1.");
     state.selectedScenes = selectedScenes;
     renderScenes();
@@ -620,8 +630,8 @@ async function runAnalysis({ reuseScenes = false } = {}) {
     const mode = satelliteMode();
     const source = SATELLITE_MODES[mode] ?? SATELLITE_MODES.combined;
     setConnection("connected", "Каталоги подключены", mode === "combined"
-      ? `${selectedScenes.length} SAR-снимков + VIIRS · ${formatDate(selectedDate)}`
-      : mode === "sentinel1" ? `${selectedScenes.length} SAR-снимков · ${formatDate(selectedDate)}` : `${source.opticalLabel} · ${formatDate(selectedDate)}`);
+      ? `${selectedScenes.length} SAR-снимков за ${sarWindowLabel()} + VIIRS · ${formatDate(selectedDate)}`
+      : mode === "sentinel1" ? `${selectedScenes.length} SAR-снимков за ${sarWindowLabel()} · ${formatDate(selectedDate)}` : `${source.opticalLabel} · ${formatDate(selectedDate)}`);
 
     const regionalScenes = selectedScenes.filter((scene) => sceneIntersectionWithRegion(scene, region) > 0);
     const observationResults = await Promise.all(regionalScenes.slice(0, 8).map((scene) => analyzeScene(scene, analysisFeatureForScene(region, scene), signal)));
@@ -647,6 +657,7 @@ function bindInterface() {
     runAnalysis();
   });
   element("region-select")?.addEventListener("change", () => runAnalysis({ reuseScenes: true }));
+  element("sar-window")?.addEventListener("change", () => runAnalysis({ reuseScenes: true }));
   element("satellite-select")?.addEventListener("change", () => {
     const selectedDate = element("observation-date")?.value;
     renderScenes();

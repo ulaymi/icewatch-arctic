@@ -211,6 +211,10 @@ button, select, input { -webkit-tap-highlight-color: transparent; }
 .map-date-control-copy small { color: #d9002b; font-size: 7px; font-weight: 700; letter-spacing: .12em; }
 .map-date-control-copy b { font-size: 11px; font-weight: 500; }
 .map-date-control-copy em { color: var(--muted); font-size: 8px; font-style: normal; text-align: right; }
+.map-date-control-meta { display: flex; align-items: flex-end; flex-direction: column; gap: 7px; }
+.sar-window-control { display: flex; align-items: center; color: var(--muted); font-size: 8px; gap: 7px; }
+.sar-window-control select { height: 28px; padding: 0 24px 0 8px; border: 1px solid var(--line); border-radius: 5px; outline: none; background: #fff; color: var(--ink); font-size: 8px; }
+.sar-window-control select:focus { border-color: var(--cyan); }
 .map-date-control input[type="range"] { width: 100%; height: 18px; margin: 0; accent-color: var(--red); cursor: pointer; }
 .map-date-control input[type="range"]:disabled { cursor: wait; opacity: .45; }
 .map-date-control-range { display: grid; align-items: center; margin-top: 2px; color: var(--muted); font-size: 7px; grid-template-columns: auto 1fr auto; gap: 8px; }
@@ -342,6 +346,7 @@ button, select, input { -webkit-tap-highlight-color: transparent; }
   .map-legend { width: 136px; }
   .map-date-control-copy { align-items: flex-start; flex-direction: column; }
   .map-date-control-copy em { text-align: left; }
+  .map-date-control-meta { align-items: flex-start; }
   .coordinates { display: none; }
   .panel-header { align-items: flex-start; }
   .period-tabs { display: none !important; }
